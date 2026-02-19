@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sunni Qibla & Masjid Finder Pro</title>
+
+<style>
+body{
+background:#0f172a;
+color:white;
+font-family:Arial;
+margin:0;
+text-align:center;
+}
+header{
+background:#065f46;
+padding:15px;
+font-size:20px;
+font-weight:bold;
+}
+button{
+padding:10px 15px;
+margin:8px;
+border:none;
+border-radius:8px;
+background:#16a34a;
+color:white;
+cursor:pointer;
+}
+.card{
+background:#1e293b;
+margin:15px;
+padding:15px;
+border-radius:10px;
+}
+#compass{
+width:260px;
+height:260px;
+border:6px solid #16a34a;
+border-radius:50%;
+margin:20px auto;
+position:relative;
+display:flex;
+align-items:center;
+justify-content:center;
+}
+#arrow{
+font-size:80px;
+transition:transform 0.5s linear;
+}
+</style>
+</head>
+<body>
+
+<header>🕌 Sunni Masjid & Qibla Finder</header>
+
+<button onclick="initApp()">📍 Start</button>
+
+<div class="card" id="locationBox"></div>
+<div class="card" id="masjidBox"></div>
+
+<h3>🧭 Live Qibla Direction</h3>
+<div id="compass">
+<div id="arrow">⬆️</div>
+</div>
+<div id="qiblaInfo"></div>
+
+<script>
+
+let userLat, userLon;
+let qiblaAngle = 0;
+
+// ---- INIT ----
+function initApp(){
+navigator.geolocation.getCurrentPosition(pos=>{
+userLat = pos.coords.latitude;
+userLon = pos.coords.longitude;
+
+document.getElementById("locationBox").innerHTML =
+"📍 Your Location:<br>Lat: "+userLat+"<br>Lon: "+userLon;
+
+calculateQibla();
+loadMasjid();
+enableCompass();
+
+},{enableHighAccuracy:true});
+}
+
+// ---- MASJID FINDER 20KM ----
+function loadMasjid(){
+
+let query = `
+[out:json];
+node["amenity"="place_of_worship"]["religion"="muslim"]
+(around:20000,${userLat},${userLon});
+out;`;
+
+fetch("https://overpass-api.de/api/interpreter",{
+method:"POST",
+body:query
+})
+.then(res=>res.json())
+.then(data=>{
+
+let masjids = data.elements.map(m=>{
+return {
+name: m.tags.name || "Unnamed Masjid",
+lat: m.lat,
+lon: m.lon,
+distance: getDistance(userLat,userLon,m.lat,m.lon)
+};
+});
+
+masjids.sort((a,b)=>a.distance-b.distance);
+
+let html="<h3>Nearby Masjid (20km)</h3>";
+
+masjids.forEach(m=>{
+html+=`
+<div>
+🕌 ${m.name}<br>
+Distance: ${m.distance.toFixed(2)} km<br>
+<a style="color:lightgreen" target="_blank"
+href="https://www.google.com/maps?q=${m.lat},${m.lon}">
+Open in Maps</a>
+<hr>
+</div>`;
+});
+
+document.getElementById("masjidBox").innerHTML = html;
+
+});
+
+}
+
+// ---- HAVERSINE ----
+function getDistance(lat1,lon1,lat2,lon2){
+const R=6371;
+const dLat=(lat2-lat1)*Math.PI/180;
+const dLon=(lon2-lon1)*Math.PI/180;
+const a=
+Math.sin(dLat/2)*Math.sin(dLat/2)+
+Math.cos(lat1*Math.PI/180)*
+Math.cos(lat2*Math.PI/180)*
+Math.sin(dLon/2)*Math.sin(dLon/2);
+return R*(2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
+}
+
+// ---- QIBLA CALCULATION ----
+function calculateQibla(){
+
+const kaabaLat=21.4225;
+const kaabaLon=39.8262;
+
+let dLon=(kaabaLon-userLon)*Math.PI/180;
+let lat1=userLat*Math.PI/180;
+let lat2=kaabaLat*Math.PI/180;
+
+let y=Math.sin(dLon);
+let x=Math.cos(lat1)*Math.tan(lat2)-Math.sin(lat1)*Math.cos(dLon);
+
+let brng=Math.atan2(y,x)*180/Math.PI;
+qiblaAngle=(brng+360)%360;
+
+document.getElementById("qiblaInfo").innerHTML=
+"Qibla Direction: "+qiblaAngle.toFixed(2)+"° from North";
+
+}
+
+// ---- COMPASS FIXED ----
+function enableCompass(){
+
+if(typeof DeviceOrientationEvent !== "undefined" &&
+typeof DeviceOrientationEvent.requestPermission === "function"){
+
+DeviceOrientationEvent.requestPermission()
+.then(permission=>{
+if(permission==="granted"){
+window.addEventListener("deviceorientation",handleOrientation,true);
+}
+});
+}else{
+window.addEventListener("deviceorientationabsolute",handleOrientation,true);
+}
+
+}
+
+function handleOrientation(event){
+
+let heading = event.alpha;
+
+if(heading!==null){
+
+let rotation = qiblaAngle - heading;
+
+document.getElementById("arrow").style.transform =
+"rotate("+rotation+"deg)";
+
+}
+
+}
+
+</script>
+</body>
+                   </html>
